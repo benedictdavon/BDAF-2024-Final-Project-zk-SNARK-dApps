@@ -30,7 +30,7 @@ const doSetup = () => {
   return { cpsoKeyPair, cpsoPublicKey, doctorKeyPair, doctorPublicKey, patientKeyPair, patientPublicKey, testAccountKeyPair, testAccountPublicKey, initialRoot, witness };
 };
 
-describe('Add Smart Contract', () => {
+describe('Smart contract testing', () => {
   let zkApp: Add;
   let deployerAccount: PublicKey;
   let deployerKey: PrivateKey;
@@ -42,16 +42,23 @@ describe('Add Smart Contract', () => {
     Mina.setActiveInstance(await Local);
 
     testSetup = doSetup();
-    deployerAccount = testSetup.testAccountPublicKey;
-    deployerKey = testSetup.testAccountKeyPair;
+    let feePayer = Local.testAccounts[0].key;
+
+    let zkAppPrivateKey = PrivateKey.random();
+    let zkAppAddress = zkAppPrivateKey.toPublicKey();
+    let zkAppInstance = new Add(zkAppAddress);
 
     // Deploy contract
     zkApp = new Add(deployerAccount);
-    const txn = await Mina.transaction(deployerAccount, () => {
-      AccountUpdate.fundNewAccount(deployerAccount);
-      zkApp.deploy({ deployerKey });
+    let txn = await Mina.transaction(feePayer, async () => {
+      AccountUpdate.fundNewAccount(feePayer);
+      await zkAppInstance.deploy();
     });
-    await txn.send();
+
+    await txn.prove();
+
+    // this tx needs .sign(), because `deploy()` adds an account update that requires signature authorization
+    await txn.sign([feePayerKey, zkAppPrivateKey]).send();
   });
 
 
@@ -76,7 +83,7 @@ describe('Add Smart Contract', () => {
       zkApp.addDoctor(testSetup.cpsoKeyPair, testSetup.doctorPublicKey, testSetup.witness);
       zkApp.sign(deployerKey);
     });
-    
+
     await txn.send();
 
     const storedRoot = zkApp.root.get();
